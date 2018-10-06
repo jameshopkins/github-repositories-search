@@ -1,7 +1,7 @@
 module Main exposing (main)
 
 import Browser exposing (Document, document)
-import Html exposing (Html, button, form, h1, input, text)
+import Html exposing (Html, button, div, form, h1, input, li, text, ul)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput, onSubmit)
 import Http
@@ -12,6 +12,7 @@ import Time exposing (Posix)
 
 type alias Model =
     { query : String
+    , projects : Broadcast
     }
 
 
@@ -30,15 +31,26 @@ type alias Project =
     }
 
 
+type alias Projects =
+    List Project
+
+
+type Broadcast
+    = NotAsked
+    | Loading
+    | Failure
+    | Success Projects
+
+
 type Msg
     = SubmitQuery
     | MutateQuery String
-    | SearchResult (Result Http.Error (List Project))
+    | SearchResult (Result Http.Error Projects)
 
 
 init : Value -> ( Model, Cmd msg )
 init _ =
-    ( Model "", Cmd.none )
+    ( Model "" NotAsked, Cmd.none )
 
 
 submitQuery : String -> Cmd Msg
@@ -78,22 +90,46 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         MutateQuery val ->
-            ( { query = val }, Cmd.none )
+            ( { model | query = val }, Cmd.none )
 
         SubmitQuery ->
-            ( model, submitQuery model.query )
+            ( { model | projects = Loading }, submitQuery model.query )
 
         SearchResult res ->
-            Debug.log (Debug.toString res)
-                ( model, Cmd.none )
+            let
+                projectsResult =
+                    case res of
+                        Ok projects ->
+                            Success projects
+
+                        Err _ ->
+                            Failure
+            in
+            ( { model | projects = projectsResult }, Cmd.none )
 
 
-search : Html Msg
-search =
+searchQuery : Html Msg
+searchQuery =
     Html.form [ onSubmit SubmitQuery ]
         [ input [ type_ "text", onInput MutateQuery ] []
         , button [ type_ "submit" ] [ text "Search!" ]
         ]
+
+
+searchResults : Broadcast -> Html Msg
+searchResults results =
+    case results of
+        NotAsked ->
+            div [] [ text "Try searching!" ]
+
+        Loading ->
+            div [] [ text "Loading results" ]
+
+        Failure ->
+            div [] [ text "Failed!" ]
+
+        Success projects ->
+            ul [] <| List.map (\project -> li [] [ text project.name ]) projects
 
 
 view : Model -> Document Msg
@@ -102,7 +138,8 @@ view model =
     , body =
         [ h1 []
             [ text "Search Github Projects!" ]
-        , search
+        , searchQuery
+        , searchResults model.projects
         ]
     }
 
