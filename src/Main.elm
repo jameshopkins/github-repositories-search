@@ -1,19 +1,30 @@
-module Main exposing (main)
+module Main exposing (main, populateLanguageFilterValues, updateFilters)
 
 import Browser exposing (Document, document)
-import Html exposing (Html, button, div, form, h1, input, li, text, ul)
+import Dict exposing (Dict)
+import Html exposing (Html, button, div, form, h1, h2, h3, input, label, li, text, ul)
 import Html.Attributes exposing (..)
-import Html.Events exposing (onInput, onSubmit)
+import Html.Events exposing (onCheck, onInput, onSubmit)
 import Http
 import Iso8601 as CrappyDateString
 import Json.Decode as Decode exposing (Decoder, Value)
+import List.Extra as List
 import Time exposing (Posix)
 
 
 type alias Model =
     { query : String
-    , projects : Broadcast
+    , results : Results
+    , filters : Filters
     }
+
+
+type alias Filters =
+    Dict String Filter
+
+
+type alias Filter =
+    Dict String Bool
 
 
 type alias Owner =
@@ -28,6 +39,7 @@ type alias Project =
     , url : String
     , lastUpdated : Posix
     , description : Maybe String
+    , language : String
     }
 
 
@@ -35,7 +47,13 @@ type alias Projects =
     List Project
 
 
-type Broadcast
+type alias Results =
+    { all : Projects
+    , transaction : ProjectsFetchTransaction
+    }
+
+
+type ProjectsFetchTransaction
     = NotAsked
     | Loading
     | Failure
@@ -46,11 +64,12 @@ type Msg
     = SubmitQuery
     | MutateQuery String
     | SearchResult (Result Http.Error Projects)
+    | UpdateFilterValue String String Bool
 
 
 init : Value -> ( Model, Cmd msg )
 init _ =
-    ( Model "" NotAsked, Cmd.none )
+    ( Model "" (Results [] NotAsked) Dict.empty, Cmd.none )
 
 
 submitQuery : String -> Cmd Msg
@@ -78,68 +97,168 @@ ownerDecoder =
 
 projectDecoder : Decoder Project
 projectDecoder =
-    Decode.map5 Project
+    let
+        languageDecoder =
+            Decode.nullable Decode.string
+                |> Decode.map (Maybe.withDefault "NO LANGUAGE")
+    in
+    Decode.map6 Project
         (Decode.field "name" Decode.string)
         (Decode.field "owner" ownerDecoder)
         (Decode.field "url" Decode.string)
         (Decode.field "updated_at" CrappyDateString.decoder)
         (Decode.field "description" (Decode.nullable Decode.string))
+        (Decode.field "language" languageDecoder)
+
+
+populateLanguageFilterValues : Filters -> Projects -> Filters
+populateLanguageFilterValues filters projects =
+    let
+        languages =
+            projects
+                |> List.map (\{ language } -> ( language, True ))
+                |> List.uniqueBy (\( language, _ ) -> language)
+                |> Dict.fromList
+    in
+    filters
+        |> Dict.insert "language" languages
+
+
+updateFilters : Filters -> String -> String -> Bool -> Filters
+updateFilters filters filterType filterItem selectedState =
+    let
+        updatedFilter =
+            Dict.get filterType filters
+                |> Maybe.withDefault Dict.empty
+                |> Dict.insert filterItem selectedState
+    in
+    filters
+        |> Dict.insert filterType updatedFilter
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        modelResults =
+            model.results
+    in
     case msg of
         MutateQuery val ->
             ( { model | query = val }, Cmd.none )
 
         SubmitQuery ->
-            ( { model | projects = Loading }, submitQuery model.query )
+            ( { model | results = { modelResults | transaction = Loading } }, submitQuery model.query )
+
+        UpdateFilterValue filterType filterItem selectedState ->
+            let
+                updatedFilters =
+                    updateFilters model.filters filterType filterItem selectedState
+            in
+            ( { model | filters = updatedFilters }, Cmd.none )
 
         SearchResult res ->
             let
                 projectsResult =
+                    Result.withDefault [] res
+
+                filters =
                     case res of
                         Ok projects ->
-                            Success projects
+                            populateLanguageFilterValues model.filters projects
 
                         Err _ ->
-                            Failure
+                            model.filters
             in
-            ( { model | projects = projectsResult }, Cmd.none )
+            ( { model
+                | filters = filters
+                , results =
+                    { modelResults | transaction = NotAsked, all = projectsResult }
+              }
+            , Cmd.none
+            )
 
 
-searchQuery : Html Msg
-searchQuery =
+searchQuery : String -> Html Msg
+searchQuery query =
     Html.form [ onSubmit SubmitQuery ]
         [ input [ type_ "text", onInput MutateQuery ] []
-        , button [ type_ "submit" ] [ text "Search!" ]
+        , button [ type_ "submit", query |> String.isEmpty |> disabled ] [ text "Search!" ]
         ]
 
 
-searchResults : Broadcast -> Html Msg
-searchResults results =
-    case results of
-        NotAsked ->
-            div [] [ text "Try searching!" ]
+filterResults : Projects -> List ( String, Bool ) -> Projects
+filterResults projects languageFilter =
+    let
+        predicate project =
+            List.any (\( language, selected ) -> language == project.language && selected == True) languageFilter
+    in
+    List.filter predicate projects
 
-        Loading ->
-            div [] [ text "Loading results" ]
 
-        Failure ->
-            div [] [ text "Failed!" ]
+searchResults : Results -> Filters -> Html Msg
+searchResults { all, transaction } filters =
+    let
+        loading =
+            case transaction of
+                Loading ->
+                    text "Loading"
 
-        Success projects ->
-            ul [] <| List.map (\project -> li [] [ text project.name ]) projects
+                _ ->
+                    text ""
+
+        languageFilter =
+            filters
+                |> Dict.get "language"
+                |> Maybe.withDefault Dict.empty
+                |> Dict.toList
+
+        resultsList =
+            filterResults all languageFilter
+    in
+    div []
+        [ ul [] <| List.map (\project -> li [] [ text project.name ]) resultsList
+        , loading
+        ]
+
+
+renderFilter : String -> Filter -> Html Msg
+renderFilter attribute filter =
+    let
+        renderFilterItem ( name, selected ) =
+            label []
+                [ text name
+                , input [ onCheck (UpdateFilterValue attribute name), type_ "checkbox", checked selected ] []
+                ]
+    in
+    div
+        []
+        [ h3 [] [ text attribute ]
+        , div [] (filter |> Dict.toList |> List.map renderFilterItem)
+        ]
+
+
+renderFilters : Filters -> Html Msg
+renderFilters filters =
+    div []
+        [ h2 [] [ text "Filters" ]
+        , case Dict.get "language" filters of
+            Just language ->
+                renderFilter "language" language
+
+            Nothing ->
+                text ""
+        ]
 
 
 view : Model -> Document Msg
-view model =
+view { filters, results, query } =
     { title = "Github Repository Search"
     , body =
         [ h1 []
             [ text "Search Github Projects!" ]
-        , searchQuery
-        , searchResults model.projects
+        , searchQuery query
+        , renderFilters filters
+        , searchResults results filters
         ]
     }
 

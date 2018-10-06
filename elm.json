@@ -12,6 +12,7 @@
             "elm/http": "1.0.0",
             "elm/json": "1.0.0",
             "elm/time": "1.0.0",
+            "elm-community/list-extra": "8.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.2"
         },
         "indirect": {
@@ -21,7 +22,11 @@
         }
     },
     "test-dependencies": {
-        "direct": {},
-        "indirect": {}
+        "direct": {
+            "elm-explorations/test": "1.1.0"
+        },
+        "indirect": {
+            "elm/random": "1.0.0"
+        }
     }
 }
