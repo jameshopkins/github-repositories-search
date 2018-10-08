@@ -5,7 +5,7 @@
   "author": "<jameshopkins0709@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "prestart": "yarn && elm make src/Main.elm --output=dist.js --debug",
+    "prestart": "npm install && elm make src/Main.elm --output=dist.js --debug",
     "start": "open index.html",
     "test": "elm-test"
   },
