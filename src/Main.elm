@@ -1,10 +1,11 @@
 module Main exposing (SortCriterion(..), main, populateLanguageFilterValues, sortResults, updateFilters)
 
 import Browser exposing (Document, document)
+import Css exposing (..)
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, div, form, h1, h2, h3, input, label, li, option, select, text, ul)
-import Html.Attributes exposing (..)
-import Html.Events exposing (onCheck, onInput, onSubmit)
+import Html.Styled exposing (Html, a, button, div, form, h1, h2, h3, img, input, label, li, option, p, select, styled, text, toUnstyled, ul)
+import Html.Styled.Attributes exposing (href, src, type_, value)
+import Html.Styled.Events exposing (onCheck, onInput, onSubmit)
 import Http
 import Iso8601 as CrappyDateString
 import Json.Decode as Decode exposing (Decoder, Value)
@@ -193,9 +194,11 @@ update msg model =
 
 searchQuery : String -> Html Msg
 searchQuery query =
-    Html.form [ onSubmit SubmitQuery ]
+    styled Html.Styled.form
+        [ flexBasis (pct 100) ]
+        [ onSubmit SubmitQuery ]
         [ input [ type_ "text", onInput MutateQuery ] []
-        , button [ type_ "submit", query |> String.isEmpty |> disabled ] [ text "Search!" ]
+        , button [ type_ "submit", query |> String.isEmpty |> Html.Styled.Attributes.disabled ] [ text "Search!" ]
         ]
 
 
@@ -236,9 +239,24 @@ sortResults criterion projects =
 
 
 renderSearchResult : Project -> Html Msg
-renderSearchResult { name, lastUpdated, score, url } =
+renderSearchResult { description, name, lastUpdated, owner, score, url } =
+    let
+        ownerInfo =
+            div []
+                [ styled img [ Css.width <| px 50 ] [ src owner.avatar ] [], text owner.name ]
+
+        formattedDescription =
+            case description of
+                Just desc ->
+                    p [] [ text desc ]
+
+                Nothing ->
+                    text ""
+    in
     li []
-        [ a [ href url, target "_blank" ] [ score |> String.fromFloat |> text ]
+        [ a [ href url, Html.Styled.Attributes.target "_blank" ] [ styled h3 [ fontSize <| px 30 ] [] [ text name ] ]
+        , ownerInfo
+        , formattedDescription
         ]
 
 
@@ -264,7 +282,9 @@ renderSearchResults { all, transaction } filters sort =
                 |> filterResults languageFilter
                 |> sortResults sort
     in
-    div []
+    styled div
+        [ flex (int 4) ]
+        []
         [ ul [] <|
             List.map renderSearchResult resultsList
         , loading
@@ -275,9 +295,11 @@ renderFilter : String -> Filter -> Html Msg
 renderFilter attribute filter =
     let
         renderFilterItem ( name, selected ) =
-            label []
+            styled label
+                [ displayFlex, justifyContent spaceBetween ]
+                []
                 [ text name
-                , input [ onCheck (UpdateFilterValue attribute name), type_ "checkbox", checked selected ] []
+                , input [ onCheck (UpdateFilterValue attribute name), type_ "checkbox", Html.Styled.Attributes.checked selected ] []
                 ]
     in
     div
@@ -302,9 +324,12 @@ renderFilters filters =
 
 renderSort : Html Msg
 renderSort =
-    select [ onInput UpdateSort ]
-        [ option [ value "relevance" ] [ text "Relevance" ]
-        , option [ value "last-updated" ] [ text "Last Updated" ]
+    div []
+        [ h2 [] [ text "Sort By" ]
+        , select [ onInput UpdateSort ]
+            [ option [ value "relevance" ] [ text "Relevance" ]
+            , option [ value "last-updated" ] [ text "Last Updated" ]
+            ]
         ]
 
 
@@ -313,22 +338,28 @@ view { filters, results, sort, query } =
     let
         resultsView =
             if not <| List.isEmpty results.all then
-                div []
+                styled div
+                    [ flex (int 1) ]
+                    []
                     [ renderSort
                     , renderFilters filters
                     ]
 
             else
                 text ""
+
+        body =
+            styled div
+                [ displayFlex, flexWrap wrap ]
+                []
+                [ styled h1 [ flexBasis (pct 100) ] [] [ text "Search Github Projects" ]
+                , searchQuery query
+                , resultsView
+                , renderSearchResults results filters sort
+                ]
     in
     { title = "Github Repository Search"
-    , body =
-        [ h1 []
-            [ text "Search Github Projects!" ]
-        , searchQuery query
-        , resultsView
-        , renderSearchResults results filters sort
-        ]
+    , body = [ toUnstyled body ]
     }
 
 
