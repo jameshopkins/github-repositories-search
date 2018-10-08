@@ -2,7 +2,7 @@ module MainTest exposing (suite)
 
 import Dict
 import Expect
-import Main exposing (populateLanguageFilterValues, updateFilters)
+import Main exposing (SortCriterion(..), populateLanguageFilterValues, sortResults, updateFilters)
 import Test exposing (Test, describe, test)
 import Time exposing (millisToPosix)
 
@@ -10,7 +10,123 @@ import Time exposing (millisToPosix)
 suite : Test
 suite =
     describe "Main"
-        [ describe "updateFilters"
+        [ describe "sortResults"
+            [ test "Sorts results given a last updated criterion" <|
+                let
+                    projects =
+                        [ { name = "Foo"
+                          , owner = { name = "James", avatar = "Some avatar" }
+                          , url = "Foo URL!!!"
+                          , lastUpdated = millisToPosix 1538998604
+                          , description = Just "Some description"
+                          , language = "Elm"
+                          , score = 1.92
+                          }
+                        , { name = "Alba"
+                          , owner = { name = "Natalie", avatar = "Some avatar" }
+                          , url = "Alba has a URL?!"
+                          , lastUpdated = millisToPosix 1233998500
+                          , description = Just "Alba is cute"
+                          , language = "Elm"
+                          , score = 5.77
+                          }
+                        , { name = "Ermmm jQuery is still cool...?"
+                          , owner = { name = "Definitely not me", avatar = "Some avatar" }
+                          , url = ":("
+                          , lastUpdated = millisToPosix 1633998500
+                          , description = Nothing
+                          , language = "jQuery"
+                          , score = 9.21
+                          }
+                        ]
+
+                    expected =
+                        [ { name = "Ermmm jQuery is still cool...?"
+                          , owner = { name = "Definitely not me", avatar = "Some avatar" }
+                          , url = ":("
+                          , lastUpdated = millisToPosix 1633998500
+                          , description = Nothing
+                          , language = "jQuery"
+                          , score = 9.21
+                          }
+                        , { name = "Foo"
+                          , owner = { name = "James", avatar = "Some avatar" }
+                          , url = "Foo URL!!!"
+                          , lastUpdated = millisToPosix 1538998604
+                          , description = Just "Some description"
+                          , language = "Elm"
+                          , score = 1.92
+                          }
+                        , { name = "Alba"
+                          , owner = { name = "Natalie", avatar = "Some avatar" }
+                          , url = "Alba has a URL?!"
+                          , lastUpdated = millisToPosix 1233998500
+                          , description = Just "Alba is cute"
+                          , language = "Elm"
+                          , score = 5.77
+                          }
+                        ]
+                in
+                \_ -> sortResults LastUpdated projects |> Expect.equal expected
+            , test "Sorts results given a score criterion" <|
+                let
+                    projects =
+                        [ { name = "Foo"
+                          , owner = { name = "James", avatar = "Some avatar" }
+                          , url = "Foo URL!!!"
+                          , lastUpdated = millisToPosix 1538998604
+                          , description = Just "Some description"
+                          , language = "Elm"
+                          , score = 1.92
+                          }
+                        , { name = "Alba"
+                          , owner = { name = "Natalie", avatar = "Some avatar" }
+                          , url = "Alba has a URL?!"
+                          , lastUpdated = millisToPosix 1233998500
+                          , description = Just "Alba is cute"
+                          , language = "Elm"
+                          , score = 5.77
+                          }
+                        , { name = "Ermmm jQuery is still cool...?"
+                          , owner = { name = "Definitely not me", avatar = "Some avatar" }
+                          , url = ":("
+                          , lastUpdated = millisToPosix 1633998500
+                          , description = Nothing
+                          , language = "jQuery"
+                          , score = 9.21
+                          }
+                        ]
+
+                    expected =
+                        [ { name = "Ermmm jQuery is still cool...?"
+                          , owner = { name = "Definitely not me", avatar = "Some avatar" }
+                          , url = ":("
+                          , lastUpdated = millisToPosix 1633998500
+                          , description = Nothing
+                          , language = "jQuery"
+                          , score = 9.21
+                          }
+                        , { name = "Alba"
+                          , owner = { name = "Natalie", avatar = "Some avatar" }
+                          , url = "Alba has a URL?!"
+                          , lastUpdated = millisToPosix 1233998500
+                          , description = Just "Alba is cute"
+                          , language = "Elm"
+                          , score = 5.77
+                          }
+                        , { name = "Foo"
+                          , owner = { name = "James", avatar = "Some avatar" }
+                          , url = "Foo URL!!!"
+                          , lastUpdated = millisToPosix 1538998604
+                          , description = Just "Some description"
+                          , language = "Elm"
+                          , score = 1.92
+                          }
+                        ]
+                in
+                \_ -> sortResults Score projects |> Expect.equal expected
+            ]
+        , describe "updateFilters"
             [ test "Updates a filter value" <|
                 let
                     filterItems =
@@ -48,6 +164,7 @@ suite =
                           , lastUpdated = millisToPosix 1538998604
                           , description = Just "Some description"
                           , language = "Elm"
+                          , score = 1.92
                           }
                         , { name = "Alba"
                           , owner = { name = "Natalie", avatar = "Some avatar" }
@@ -55,6 +172,7 @@ suite =
                           , lastUpdated = millisToPosix 1538998500
                           , description = Just "Alba is cute"
                           , language = "Elm"
+                          , score = 5.77
                           }
                         , { name = "Ermmm jQuery is still cool...?"
                           , owner = { name = "Definitely not me", avatar = "Some avatar" }
@@ -62,6 +180,7 @@ suite =
                           , lastUpdated = millisToPosix 1538998550
                           , description = Nothing
                           , language = "jQuery"
+                          , score = 9.21
                           }
                         , { name = "Elixir"
                           , owner = { name = "james", avatar = "Some avatar" }
@@ -69,6 +188,7 @@ suite =
                           , lastUpdated = millisToPosix 1538998250
                           , description = Just "I love Elixir!!"
                           , language = "Elixir"
+                          , score = 10.92
                           }
                         ]
 
