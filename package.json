@@ -10,6 +10,7 @@
   "scripts": {
     "prestart": "npm install && elm make src/Main.elm --output=dist.js --debug",
     "start": "open index.html",
+    "pretest": "npm install",
     "test": "elm-test"
   },
   "devDependencies": {
