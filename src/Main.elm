@@ -84,15 +84,21 @@ init _ =
 submitQuery : String -> Cmd Msg
 submitQuery query =
     let
-        decoder =
-            Decode.field "items" (Decode.list projectDecoder)
+        decoder { body } =
+            body
+                |> Decode.decodeString (Decode.field "items" (Decode.list projectDecoder))
+                |> Result.mapError Decode.errorToString
 
         request =
-            Http.get
-                ("https://api.github.com/search/repositories?q="
-                    ++ query
-                )
-                decoder
+            Http.request
+                { method = "GET"
+                , headers = []
+                , body = Http.emptyBody
+                , withCredentials = False
+                , timeout = Nothing
+                , url = "https://api.github.com/search/repositories?q=" ++ query
+                , expect = Http.expectStringResponse decoder
+                }
     in
     Http.send SearchResult request
 
