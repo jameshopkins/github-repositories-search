@@ -1,4 +1,11 @@
-module Main exposing (SortCriterion(..), main, populateLanguageFilterValues, sortResults, updateFilters)
+module Main exposing
+    ( SortCriterion(..)
+    , main
+    , populateLanguageFilterValues
+    , resultsPaginationParser
+    , sortResults
+    , updateFilters
+    )
 
 import Browser exposing (Document, document)
 import Css exposing (..)
@@ -9,7 +16,9 @@ import Html.Styled.Events exposing (onCheck, onInput, onSubmit)
 import Http
 import Iso8601 as CrappyDateString
 import Json.Decode as Decode exposing (Decoder, Value)
+import LinkHeader
 import List.Extra as List
+import Set
 import Time exposing (Posix)
 
 
@@ -81,14 +90,40 @@ init _ =
     ( Model "" (Results [] NotAsked) Dict.empty Score, Cmd.none )
 
 
-submitQuery : String -> Cmd Msg
-submitQuery query =
+resultsPaginationParser : String -> Maybe Int
+resultsPaginationParser raw =
+    case raw |> LinkHeader.parse |> List.last of
+        Just { rel } ->
+            case rel of
+                LinkHeader.RelLast page ->
+                    Just page
+
+                _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing
+
+
+resultsDecoder : Http.Response String -> Result String Projects
+resultsDecoder { body, headers } =
     let
-        decoder { body } =
+        bodyResponse =
             body
                 |> Decode.decodeString (Decode.field "items" (Decode.list projectDecoder))
                 |> Result.mapError Decode.errorToString
 
+        paginationHeader =
+            headers
+                |> Dict.get "link"
+    in
+    Debug.log (Debug.toString paginationHeader)
+        bodyResponse
+
+
+submitQuery : String -> Cmd Msg
+submitQuery query =
+    let
         request =
             Http.request
                 { method = "GET"
@@ -97,7 +132,7 @@ submitQuery query =
                 , withCredentials = False
                 , timeout = Nothing
                 , url = "https://api.github.com/search/repositories?q=" ++ query
-                , expect = Http.expectStringResponse decoder
+                , expect = Http.expectStringResponse resultsDecoder
                 }
     in
     Http.send SearchResult request
