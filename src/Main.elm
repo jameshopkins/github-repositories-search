@@ -18,8 +18,8 @@ import Iso8601 as CrappyDateString
 import Json.Decode as Decode exposing (Decoder, Value)
 import LinkHeader
 import List.Extra as List
-import Set
 import Time exposing (Posix)
+import Url.Builder
 
 
 type alias Model =
@@ -61,11 +61,18 @@ type alias Projects =
 
 type alias Results =
     { all : Projects
-    , transaction : ProjectsFetchTransaction
+    , transaction : ResultsFetchTransaction
+    , pagination : ResultsPagination
     }
 
 
-type ProjectsFetchTransaction
+type alias ResultsPagination =
+    { nextPage : Int
+    , lastPage : Maybe Int
+    }
+
+
+type ResultsFetchTransaction
     = NotAsked
     | Loading
     | Failure
@@ -75,7 +82,7 @@ type ProjectsFetchTransaction
 type Msg
     = SubmitQuery
     | MutateQuery String
-    | SearchResult (Result Http.Error Projects)
+    | SearchResult (Result Http.Error ( Projects, Int ))
     | UpdateFilterValue String String Bool
     | UpdateSort String
 
@@ -87,43 +94,55 @@ type SortCriterion
 
 init : Value -> ( Model, Cmd msg )
 init _ =
-    ( Model "" (Results [] NotAsked) Dict.empty Score, Cmd.none )
+    let
+        defaultResults =
+            Results [] NotAsked { nextPage = 1, lastPage = Nothing }
+    in
+    ( Model "" defaultResults Dict.empty Score, Cmd.none )
 
 
-resultsPaginationParser : String -> Maybe Int
+resultsPaginationParser : String -> Result String Int
 resultsPaginationParser raw =
     case raw |> LinkHeader.parse |> List.last of
         Just { rel } ->
             case rel of
                 LinkHeader.RelLast page ->
-                    Just page
+                    Ok page
 
                 _ ->
-                    Nothing
+                    Err "No last page"
 
         Nothing ->
-            Nothing
+            Err "Couldn't get last list item"
 
 
-resultsDecoder : Http.Response String -> Result String Projects
+resultsDecoder : Http.Response String -> Result String ( Projects, Int )
 resultsDecoder { body, headers } =
     let
-        bodyResponse =
+        resultProjects =
             body
                 |> Decode.decodeString (Decode.field "items" (Decode.list projectDecoder))
                 |> Result.mapError Decode.errorToString
 
-        paginationHeader =
+        resultLastPage =
             headers
                 |> Dict.get "link"
+                |> Result.fromMaybe "Couldn't retrieve Link header"
+                |> Result.andThen resultsPaginationParser
     in
-    Debug.log (Debug.toString paginationHeader)
-        bodyResponse
+    Result.map2 (\projects lastPage -> ( projects, lastPage )) resultProjects resultLastPage
 
 
-submitQuery : String -> Cmd Msg
-submitQuery query =
+submitQuery : String -> Int -> Cmd Msg
+submitQuery query nextPage =
     let
+        url =
+            Url.Builder.crossOrigin "https://api.github.com"
+                [ "search"
+                , "repositories"
+                ]
+                [ Url.Builder.string "q" query, Url.Builder.int "page" nextPage ]
+
         request =
             Http.request
                 { method = "GET"
@@ -131,7 +150,7 @@ submitQuery query =
                 , body = Http.emptyBody
                 , withCredentials = False
                 , timeout = Nothing
-                , url = "https://api.github.com/search/repositories?q=" ++ query
+                , url = url
                 , expect = Http.expectStringResponse resultsDecoder
                 }
     in
@@ -208,7 +227,7 @@ update msg model =
             ( { model | query = val }, Cmd.none )
 
         SubmitQuery ->
-            ( { model | results = { modelResults | transaction = Loading } }, submitQuery model.query )
+            ( { model | results = { modelResults | transaction = Loading } }, submitQuery model.query model.results.pagination.nextPage )
 
         UpdateFilterValue filterType filterItem selectedState ->
             let
@@ -220,11 +239,18 @@ update msg model =
         UpdateSort criterion ->
             ( { model | sort = normaliseSortCriterion criterion }, Cmd.none )
 
-        SearchResult (Ok projects) ->
+        SearchResult (Ok ( projects, lastPage )) ->
             ( { model
                 | filters = populateLanguageFilterValues model.filters projects
                 , results =
-                    { modelResults | transaction = NotAsked, all = projects }
+                    { modelResults
+                        | transaction = NotAsked
+                        , all = projects
+                        , pagination =
+                            ResultsPagination
+                                model.results.pagination.nextPage
+                                (Just lastPage)
+                    }
               }
             , Cmd.none
             )
