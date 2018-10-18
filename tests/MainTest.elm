@@ -2,7 +2,8 @@ module MainTest exposing (suite)
 
 import Dict
 import Expect
-import Main exposing (SortCriterion(..), populateLanguageFilterValues, sortResults, updateFilters)
+import Main exposing (SortCriterion(..), populateLanguageFilterValues, resultsPaginationParser, sortResults, updateFilters)
+import Parser
 import Test exposing (Test, describe, test)
 import Time exposing (millisToPosix)
 
@@ -10,7 +11,18 @@ import Time exposing (millisToPosix)
 suite : Test
 suite =
     describe "Main"
-        [ describe "sortResults"
+        [ describe "resultsPaginationParser"
+            [ test "Wahey" <|
+                let
+                    expected =
+                        Just 34
+
+                    rawString =
+                        "<https://api.github.com/search/repositories?q=bbc&page=2>; rel=\"next\", <https://api.github.com/search/repositories?q=bbc&page=34>; rel=\"last\""
+                in
+                \_ -> resultsPaginationParser rawString |> Expect.equal expected
+            ]
+        , describe "sortResults"
             [ test "Sorts results given a last updated criterion" <|
                 let
                     projects =
